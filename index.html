@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Budget Pro Ultimate</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{font-family:sans-serif;background:#f5f5f5;padding:20px}
+.card{background:#fff;padding:15px;margin-bottom:15px;border-radius:10px}
+button{padding:8px;margin:5px}
+input,select{padding:6px;margin:5px}
+.metric{font-size:18px;margin:5px 0}
+</style>
+</head>
+
+<body>
+
+<h2>💰 Budget Pro Ultimate</h2>
+
+<!-- MOIS -->
+<div class="card">
+<select id="month"></select>
+</div>
+
+<!-- METRICS -->
+<div class="card" id="metrics"></div>
+
+<!-- AJOUT DEPENSE -->
+<div class="card">
+<h3>Ajouter dépense</h3>
+<input id="name" placeholder="Nom">
+<input id="amount" type="number" placeholder="Montant">
+<select id="type">
+<option value="normal">Normale</option>
+<option value="irregulier">Irrégulière (fonds)</option>
+</select>
+<button onclick="add()">Ajouter</button>
+</div>
+
+<!-- LISTE -->
+<div class="card" id="list"></div>
+
+<!-- FONDS -->
+<div class="card" id="fonds"></div>
+
+<!-- HISTORIQUE -->
+<div class="card">
+<canvas id="chart"></canvas>
+</div>
+
+<script>
+
+/* =====================
+DATA
+===================== */
+
+let data = JSON.parse(localStorage.getItem("budget")) || {
+  revenus: 4000,
+  depenses: [],
+  fonds: 0
+};
+
+/* =====================
+MOIS
+===================== */
+
+function genMonths(){
+  let html='';
+  const now=new Date();
+  for(let i=0;i<12;i++){
+    const d=new Date(now.getFullYear(), now.getMonth()-i,1);
+    const key=d.toISOString().slice(0,7);
+    html+=`<option value="${key}">${key}</option>`;
+  }
+  document.getElementById("month").innerHTML=html;
+}
+
+function currentMonth(){
+  return document.getElementById("month").value;
+}
+
+/* =====================
+ADD
+===================== */
+
+function add(){
+  const name=document.getElementById("name").value;
+  const amount=parseFloat(document.getElementById("amount").value);
+  const type=document.getElementById("type").value;
+
+  if(!name || !amount) return;
+
+  data.depenses.push({
+    name,
+    amount,
+    type,
+    history:{}
+  });
+
+  save();
+  render();
+}
+
+/* =====================
+REAL
+===================== */
+
+function setReal(i){
+  const val=prompt("Montant réel ?");
+  const m=currentMonth();
+
+  data.depenses[i].history[m]=parseFloat(val);
+
+  // si irrégulier → on utilise le fonds
+  if(data.depenses[i].type==="irregulier"){
+    data.fonds -= parseFloat(val);
+  }
+
+  save();
+  render();
+}
+
+/* =====================
+CALCULS
+===================== */
+
+function totalReal(){
+  const m=currentMonth();
+  return data.depenses.reduce((a,d)=>a+(d.history[m]||0),0);
+}
+
+function totalMonth(key){
+  return data.depenses.reduce((a,d)=>a+(d.history[key]||0),0);
+}
+
+/* =====================
+FONDS
+===================== */
+
+function alimenterFonds(){
+  const val=prompt("Montant mensuel fonds ?");
+  data.fonds += parseFloat(val);
+  save();
+  render();
+}
+
+/* =====================
+RENDER
+===================== */
+
+function render(){
+
+  // METRICS
+  const dep=totalReal();
+  document.getElementById("metrics").innerHTML=`
+    <div class="metric">Revenus: ${data.revenus}$</div>
+    <div class="metric">Dépenses: ${dep}$</div>
+    <div class="metric">Net: ${data.revenus-dep}$</div>
+  `;
+
+  // LISTE
+  document.getElementById("list").innerHTML=data.depenses.map((d,i)=>{
+    const val=d.history[currentMonth()]||0;
+    return `
+      <div>
+        ${d.name} - ${d.amount}$ 
+        [${d.type}]
+        réel: ${val}$
+        <button onclick="setReal(${i})">Entrer réel</button>
+      </div>
+    `;
+  }).join('');
+
+  // FONDS
+  document.getElementById("fonds").innerHTML=`
+    <h3>💼 Fonds irrégulier</h3>
+    <div>Solde: ${data.fonds}$</div>
+    <button onclick="alimenterFonds()">Alimenter</button>
+  `;
+
+  renderChart();
+}
+
+/* =====================
+CHART
+===================== */
+
+let chart;
+
+function renderChart(){
+  const ctx=document.getElementById("chart");
+
+  const months=[...new Set(data.depenses.flatMap(d=>Object.keys(d.history)))].sort();
+
+  const vals=months.map(m=>totalMonth(m));
+
+  if(chart) chart.destroy();
+
+  chart=new Chart(ctx,{
+    type:"line",
+    data:{
+      labels:months,
+      datasets:[{data:vals}]
+    }
+  });
+}
+
+/* =====================
+SAVE
+===================== */
+
+function save(){
+  localStorage.setItem("budget", JSON.stringify(data));
+}
+
+/* =====================
+INIT
+===================== */
+
+genMonths();
+render();
+
+</script>
+
+</body>
+</html>
